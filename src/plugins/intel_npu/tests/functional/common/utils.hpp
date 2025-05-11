@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2024 Intel Corporation
+// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
@@ -6,21 +6,8 @@
 
 #include <filesystem>
 #include <openvino/runtime/core.hpp>
+
 #include "common_test_utils/unicode_utils.hpp"
-
-namespace ov {
-
-namespace test {
-
-namespace utils {
-
-extern const char* DEVICE_NPU;
-
-}  // namespace utils
-
-}  // namespace test
-
-}  // namespace ov
 
 std::string getBackendName(const ov::Core& core);
 
@@ -31,6 +18,8 @@ std::string modelPriorityToString(const ov::hint::Priority priority);
 std::string removeDeviceNameOnlyID(const std::string& device_name_id);
 
 std::vector<ov::AnyMap> getRWMandatoryPropertiesValues(std::vector<ov::AnyMap> props);
+
+std::shared_ptr<ov::Model> createModelWithStates(ov::element::Type type, const ov::Shape& shape);
 
 template <typename C,
           typename = typename std::enable_if<(std::is_same<C, char>::value || std::is_same<C, wchar_t>::value)>::type>
@@ -86,6 +75,8 @@ struct GenericTestCaseNameClass {
 };
 
 template <typename T>
-constexpr bool GenericTestCaseNameClass::hasGetTestCaseName<
-        T, std::void_t<decltype(std::declval<T>().getTestCaseName(
-                   std::declval<testing::TestParamInfo<typename T::ParamType>>()))>> = true;
+constexpr bool
+    GenericTestCaseNameClass::hasGetTestCaseName<T,
+                                                 std::void_t<decltype(std::declval<T>().getTestCaseName(
+                                                     std::declval<testing::TestParamInfo<typename T::ParamType>>()))>> =
+        true;

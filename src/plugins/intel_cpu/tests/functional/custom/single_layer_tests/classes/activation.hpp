@@ -22,7 +22,8 @@ using ActivationLayerCPUTestParamSet =
                ov::element::Type,                                      // Net precision
                ov::element::Type,                                      // Input precision
                ov::element::Type,                                      // Output precision
-               CPUTestUtils::CPUSpecificParams>;
+               CPUTestUtils::CPUSpecificParams,
+               bool>;
 
 class ActivationLayerCPUTest : public testing::WithParamInterface<ActivationLayerCPUTestParamSet>,
                                virtual public ov::test::SubgraphBaseTest,
@@ -35,7 +36,7 @@ protected:
     void SetUp() override;
 
 private:
-    ov::element::Type netPrecision = ov::element::undefined;
+    ov::element::Type netPrecision = ov::element::dynamic;
     utils::ActivationTypes activationType = utils::ActivationTypes::None;
 
     std::string getPrimitiveType(
@@ -49,6 +50,7 @@ namespace Activation {
 const std::vector<size_t> activationShapes();
 
 const std::map<utils::ActivationTypes, std::vector<std::vector<float>>>& activationTypes();
+const std::map<utils::ActivationTypes, std::vector<std::vector<float>>>& activationTypesSnippets();
 
 const std::vector<ov::element::Type>& netPrc();
 

@@ -11,6 +11,7 @@ detailed instructions where necessary.
   * [Required workflows](#required-workflows)
   * [Workflow structure](#structure-of-the-workflows)
   * [Workflow and job organisation](#workflows-and-jobs-organisation)
+  * [Security considerations](#security-considerations)
 * [Finding results, artifacts and logs](#finding-results-artifacts-and-logs)
 * [Custom actions overview](#custom-actions)
 * [Machines overview](#machines)
@@ -18,6 +19,7 @@ detailed instructions where necessary.
 * [Caches overview](#caches)
 * [How to add new tests](#adding-new-tests)
 * [Optimizing workflow based on PR changes](#optimizing-workflow-based-on-PR-changes)
+* [Merge Queue](#merge-queue)
 
 ## Workflows
 
@@ -32,13 +34,13 @@ They include:
 
 You can find all workflows for this repository in the [workflows folder](../../../../.github/workflows).
 The three main ones, providing most coverage for different operating systems, are:
-* [Linux](../../../../.github/workflows/linux.yml)
+* [Linux](../../../../.github/workflows/ubuntu_22.yml)
 * [Windows](../../../../.github/workflows/windows.yml)
 * [macOS](../../../../.github/workflows/mac.yml)
 
 Additionally, several supporting workflows build and test OpenVINO for other operating systems and processor architectures:
 * [Android ARM64](../../../../.github/workflows/android_arm64.yml)
-* [Fedora](../../../../.github/workflows/fedora.yml)
+* [Fedora](../../../../.github/workflows/fedora_29.yml)
 * [Linux Conditional Compilation](../../../../.github/workflows/linux_conditional_compilation.yml)
 * [Linux RISC-V](../../../../.github/workflows/linux_riscv.yml)
 * [Windows Conditional Compilation](../../../../.github/workflows/windows_conditional_compilation.yml)
@@ -56,7 +58,7 @@ and see what and how to [obtain additional actions](https://github.com/marketpla
 Workflows run whenever they are triggered by predefined [events](https://docs.github.com/en/actions/using-workflows/events-that-trigger-workflows).
 These triggers **are not** mutually exclusive and multiple can be used by one workflow.
 The OpenVINO repository has three, and as you may see in the example below, they are all
-included in the [Linux workflow](../../../../.github/workflows/linux.yml). They are:
+included in the [Linux workflow](../../../../.github/workflows/ubuntu_22.yml). They are:
 
 * `on: schedule` - schedule trigger
   * This trigger runs the workflow on a specified interval (e.g., nightly).
@@ -129,7 +131,7 @@ The workflow structures for Linux, Windows, and macOS are mostly the same:
 **NOTE**: some workflows may use the same structure, while others may lack the last 3 steps,
 with tests coming right after the `Build` step.
 
-Overview of the [Linux workflow](../../../../.github/workflows/linux.yml).
+Overview of the [Linux workflow](../../../../.github/workflows/ubuntu_22.yml).
 There are several jobs present:
 
 ```yaml
@@ -167,7 +169,7 @@ Each job has several keys that describe its environment. Consider checking a com
 
 This section describes the specifics of the OpenVINO CI environment.
 
-Overview of the [Linux workflow's](../../../../.github/workflows/linux.yml) `Python_Unit_Tests` job:
+Overview of the [Linux workflow's](../../../../.github/workflows/ubuntu_22.yml) `Python_Unit_Tests` job:
 ```yaml
   Python_Unit_Tests:
     name: Python unit tests
@@ -204,6 +206,10 @@ Overview of the [Linux workflow's](../../../../.github/workflows/linux.yml) `Pyt
 * A job must define `steps` - a series of commands to execute in the predefined environment.
   * All the steps are executed in the shell specified by the `shell` key under `defaults: run:`
     unless a shell is specified directly in a step.
+
+### Security considerations
+
+Please consult [workflow security guidelines](security.md) before submitting a PR with GitHub Actions workflows changes.
 
 ## Finding Results, Artifacts, and Logs
 
@@ -294,6 +300,22 @@ If you would like to add new tests, refer to the [How to add Tests](./adding_tes
 
 To optimize pre-commit workflow by running only the jobs that are actually required to validate
 changes in a pull request, you can use the Smart CI feature - [learn more about it](./smart_ci.md).
+
+## Merge Queue
+
+The OpenVINO GitHub organisation utilises Merge Queue to automate the Pull Requests' merging process. Learn more about MQ and available settings in the [official documentation](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/configuring-pull-request-merges/managing-a-merge-queue).
+
+Merge Queue has several settings that are configured on a per-repository basis. The [OpenVINO repository](https://github.com/openvinotoolkit/openvino) uses the following settings:
+* **Merge method**: *Squash and Merge*
+* **Build concurrency**:
+  * **Maximum pull requests to build**: *5*
+* **Only merge non-failing Pull Requests**: *No*
+* **Status check timeout**: *360 minutes*
+* **Merge limits**: 
+  * **Minimum pull requests to merge**: *1*
+  * **Maximum pull requests to merge**: *2*
+
+If you would like to enable Merge Queue for another repository in the OpenVINO GitHub organisation, use these settings as the default ones and adjust if needed.  
 
 ## See also
 

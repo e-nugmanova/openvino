@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2024 Intel Corporation
+// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
@@ -25,6 +25,7 @@ DataTensor::DataChannelArray DataTensor::dataChannelArray {{
     { DataLayout::bxfy,                  {  2,  0, -1, -1, -1, -1,  1,  3 } },
     { DataLayout::fbyx,                  {  0,  1, -1, -1, -1, -1,  3,  2 } },
     { DataLayout::fyxb,                  {  1,  2, -1, -1, -1, -1,  3,  0 } },
+    { DataLayout::ybfx,                  {  0,  3, -1, -1, -1, -1,  1,  2 } },
     { DataLayout::b_fs_yx_fsv2,          {  0,  1, -1, -1, -1, -1,  2,  3 } },
     { DataLayout::b_fs_yx_fsv4,          {  0,  1, -1, -1, -1, -1,  2,  3 } },
     { DataLayout::b_fs_yx_fsv8,          {  0,  1, -1, -1, -1, -1,  2,  3 } },
@@ -118,6 +119,7 @@ WeightsTensor::WeightsChannelArray WeightsTensor::weightsChannelArray {{
     { WeightsLayout::os_is_yx_osv32_isv4_swizzled_by_2,           {  0,  1, -1,   2,   3, -1 } },
     { WeightsLayout::os_is_yx_osv32_isv4,                         {  0,  1, -1,   2,   3, -1 } },
     { WeightsLayout::os_is_yx_osv32_isv2,                         {  0,  1, -1,   2,   3, -1 } },
+    { WeightsLayout::os_is_yx_osv64_isv2,                         {  0,  1, -1,   2,   3, -1 } },
     { WeightsLayout::os_is_zyx_osv32_isv4,                        {  0,  1,  2,   3,   4, -1 } },
     { WeightsLayout::oizyx,                                       {  0,  1,  2,   3,   4, -1 } },
     { WeightsLayout::iozyx,                                       {  0,  1,  2,   4,   3, -1 } },
@@ -532,11 +534,19 @@ void DataTensor::SwapXY() {
     // Swap XY axes.
     y.pitch = 1;
     x.pitch = y.v + y.pad.Total();
+    int x_idx = Channelndex(l, DataChannelName::X);
+    int y_idx = Channelndex(l, DataChannelName::Y);
+    int f_idx = Channelndex(l, DataChannelName::FEATURE);
+    int b_idx = Channelndex(l, DataChannelName::BATCH);
+    OPENVINO_ASSERT(std::min({x_idx, y_idx, f_idx, b_idx}) >= 0, "Invalid layout channel index");
+
     std::vector<Dim> vec(ChannelsCount(l));
-    vec[Channelndex(l, DataChannelName::X)] = y;
-    vec[Channelndex(l, DataChannelName::Y)] = x;
-    vec[Channelndex(l, DataChannelName::FEATURE)] = Feature();
-    vec[Channelndex(l, DataChannelName::BATCH)] = Batch();
+
+    vec[x_idx] = y;
+    vec[y_idx] = x;
+    vec[f_idx] = Feature();
+    vec[b_idx] = Batch();
+
     *this = {vec, dtype, l};
 }
 
@@ -971,6 +981,9 @@ void WeightsTensor::SwapXY() {
     }
     auto x_index = Channelndex(layout, WeightsChannelName::X);
     auto y_index = Channelndex(layout, WeightsChannelName::Y);
+
+    OPENVINO_ASSERT(x_index >= 0 && y_index >= 0, "Invalid layout channel index.");
+
     std::swap(vec[x_index], vec[y_index]);
     *this = {vec, dtype, layout};
 }

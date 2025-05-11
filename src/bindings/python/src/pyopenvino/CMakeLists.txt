@@ -1,4 +1,4 @@
-# Copyright (C) 2018-2024 Intel Corporation
+# Copyright (C) 2018-2025 Intel Corporation
 # SPDX-License-Identifier: Apache-2.0
 
 project (pyopenvino)
@@ -18,7 +18,6 @@ endif()
 
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${PYTHON_BRIDGE_OUTPUT_DIRECTORY})
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${PYTHON_BRIDGE_OUTPUT_DIRECTORY})
-set(CMAKE_COMPILE_PDB_OUTPUT_DIRECTORY ${PYTHON_BRIDGE_OUTPUT_DIRECTORY})
 set(CMAKE_PDB_OUTPUT_DIRECTORY ${PYTHON_BRIDGE_OUTPUT_DIRECTORY})
 
 # compile and linker options
@@ -50,10 +49,14 @@ if(TARGET openvino::frontend::pytorch)
     add_subdirectory(frontend/pytorch)
 endif()
 
+if(TARGET openvino::frontend::jax)
+    add_subdirectory(frontend/jax)
+endif()
+
 # create target
 
-file(GLOB_RECURSE SOURCES core/*.cpp graph/*.cpp frontend/*.cpp utils/*.cpp pyopenvino.cpp)
-list(FILTER SOURCES EXCLUDE REGEX ".*(frontend/(onnx|tensorflow|paddle|pytorch))/*")
+file(GLOB_RECURSE SOURCES core/*.cpp experimental/*.cpp graph/*.cpp frontend/*.cpp utils/*.cpp pyopenvino.cpp)
+list(FILTER SOURCES EXCLUDE REGEX ".*(frontend/(onnx|tensorflow|paddle|pytorch|jax))/*")
 
 pybind11_add_module(${PROJECT_NAME} MODULE NO_EXTRAS ${SOURCES})
 

@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2024 Intel Corporation
+// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
@@ -34,11 +34,13 @@ public:
     static std::string to_string(gemm_node const& node);
 
     static std::vector<layout> transform_input_layouts(const std::shared_ptr<const gemm> primitive,
-                                                       const std::vector<layout>& input_layouts);
+                                                       const std::vector<layout>& input_layouts,
+                                                       const bool allow_new_shape_infer);
     static layout transform_output_layout(const std::shared_ptr<const gemm> primitive, const std::vector<layout>& input_layouts, const layout& output_layout);
 
     static bool is_fusable_permute_input_order_onednn(const std::vector<size_t>& permute_order, format& fmt) {
         const std::vector<format> gemm_in_format_white_list = {format::bfyx,
+                                                               format::bfxy,
                                                                format::fyxb,
                                                                format::byfx,
                                                                format::bxfy,
@@ -62,10 +64,11 @@ public:
 
     static bool is_fusable_permute_output_order_onednn(const std::vector<size_t>& target_order, format& fmt) {
         const std::vector<format> gemm_out_format_white_list = {format::bfyx,
-                                                               format::fyxb,
-                                                               format::fybx,
-                                                               format::byfx,
-                                                               format::ybfx};
+                                                                format::bfxy,
+                                                                format::fyxb,
+                                                                format::fybx,
+                                                                format::byfx,
+                                                                format::ybfx};
 
         for (const auto& cand_format : gemm_out_format_white_list) {
             const auto cand_format_order = format::traits(static_cast<format::type>(cand_format))._order;

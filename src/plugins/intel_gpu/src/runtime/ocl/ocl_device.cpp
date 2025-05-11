@@ -1,6 +1,13 @@
-﻿// Copyright (C) 2018-2024 Intel Corporation
+﻿// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
+
+#ifdef ENABLE_ONEDNN_FOR_GPU
+#ifndef NOMINMAX
+# define NOMINMAX
+#endif
+#include "gpu/intel/jit/generator.hpp"
+#endif  // ENABLE_ONEDNN_FOR_GPU
 
 #include "ocl_device.hpp"
 #include "ocl_common.hpp"
@@ -43,6 +50,25 @@ namespace cldnn {
 namespace ocl {
 
 namespace {
+
+#ifdef ENABLE_ONEDNN_FOR_GPU
+gpu_arch convert_ngen_arch(ngen::HW gpu_arch) {
+    switch (gpu_arch) {
+        case ngen::HW::Gen9: return gpu_arch::gen9;
+        case ngen::HW::Gen11: return gpu_arch::gen11;
+        case ngen::HW::XeLP: return gpu_arch::xe_lp;
+        case ngen::HW::XeHP: return gpu_arch::xe_hp;
+        case ngen::HW::XeHPG: return gpu_arch::xe_hpg;
+        case ngen::HW::XeHPC: return gpu_arch::xe_hpc;
+        case ngen::HW::Xe2: return gpu_arch::xe2;
+        case ngen::HW::Xe3: return gpu_arch::xe3;
+        case ngen::HW::Gen10:
+        case ngen::HW::Unknown: return gpu_arch::unknown;
+    }
+    return gpu_arch::unknown;
+}
+#endif
+
 int driver_dev_id() {
     const std::vector<int> unused_ids = {
         0x4905, 0x4906, 0x4907, 0x4908
@@ -172,7 +198,7 @@ bool get_imad_support(const cl::Device& device) {
     return false;
 }
 
-device_info init_device_info(const cl::Device& device) {
+device_info init_device_info(const cl::Device& device, const cl::Context& context) {
     device_info info = {};
     info.vendor_id = static_cast<uint32_t>(device.getInfo<CL_DEVICE_VENDOR_ID>());
     info.dev_name = device.getInfo<CL_DEVICE_NAME>();
@@ -198,6 +224,7 @@ device_info init_device_info(const cl::Device& device) {
     info.max_local_mem_size = static_cast<uint64_t>(device.getInfo<CL_DEVICE_LOCAL_MEM_SIZE>());
     info.max_global_mem_size = static_cast<uint64_t>(device.getInfo<CL_DEVICE_GLOBAL_MEM_SIZE>());
     info.max_alloc_mem_size = static_cast<uint64_t>(device.getInfo<CL_DEVICE_MAX_MEM_ALLOC_SIZE>());
+    info.max_global_cache_size = static_cast<uint64_t>(device.getInfo<CL_DEVICE_GLOBAL_MEM_CACHE_SIZE>());
 
     info.supports_image = static_cast<uint8_t>(device.getInfo<CL_DEVICE_IMAGE_SUPPORT>());
     info.max_image2d_width = static_cast<uint64_t>(device.getInfo<CL_DEVICE_IMAGE2D_MAX_WIDTH>());
@@ -224,8 +251,6 @@ device_info init_device_info(const cl::Device& device) {
     info.supports_usm = extensions.find("cl_intel_unified_shared_memory ") != std::string::npos ||
                         extensions.find("cl_intel_unified_shared_memory_preview ") != std::string::npos;
 
-    info.supports_local_block_io = extensions.find("cl_intel_subgroup_local_block_io ") != std::string::npos;
-
     info.supports_queue_families = extensions.find("cl_intel_command_queue_families ") != std::string::npos;
 
     if (info.supports_intel_required_subgroup_size) {
@@ -250,7 +275,8 @@ device_info init_device_info(const cl::Device& device) {
     bool nv_device_attr_supported = extensions.find("cl_nv_device_attribute_query") != std::string::npos;
     info.has_separate_cache = false;
     if (device_attr_supported) {
-        info.gfx_ver = parse_version(device.getInfo<CL_DEVICE_IP_VERSION_INTEL>());
+        info.ip_version = device.getInfo<CL_DEVICE_IP_VERSION_INTEL>();
+        info.gfx_ver = parse_version(info.ip_version);
         info.device_id = device.getInfo<CL_DEVICE_ID_INTEL>();
         info.num_slices = device.getInfo<CL_DEVICE_NUM_SLICES_INTEL>();
         info.num_sub_slices_per_slice = device.getInfo<CL_DEVICE_NUM_SUB_SLICES_PER_SLICE_INTEL>();
@@ -267,9 +293,6 @@ device_info init_device_info(const cl::Device& device) {
         GPU_DEBUG_INFO << "GPU version: "
             << static_cast<int>(info.gfx_ver.major) << "." << static_cast<int>(info.gfx_ver.minor) << "." << static_cast<int>(info.gfx_ver.revision)
             << (info.has_separate_cache ? " with separate cache" : "") << std::endl;
-        GPU_DEBUG_GET_INSTANCE(debug_config);
-        GPU_DEBUG_IF(debug_config->disable_onednn)
-            info.supports_immad = false;
     } else if (nv_device_attr_supported) {
         info.gfx_ver = {static_cast<uint16_t>(device.getInfo<CL_DEVICE_COMPUTE_CAPABILITY_MAJOR_NV>()),
                         static_cast<uint8_t>(device.getInfo<CL_DEVICE_COMPUTE_CAPABILITY_MINOR_NV>()),
@@ -295,6 +318,24 @@ device_info init_device_info(const cl::Device& device) {
         }
         info.num_ccs = std::max<uint32_t>(num_queues, info.num_ccs);
     }
+
+
+#ifdef ENABLE_ONEDNN_FOR_GPU
+    using namespace dnnl::impl::gpu::intel::jit;
+    ngen::Product product = ngen::OpenCLCodeGenerator<ngen::HW::Unknown>::detectHWInfo(context.get(), device.get());
+    info.arch = convert_ngen_arch(ngen::getCore(product.family));
+
+    // We change the value of this flag to avoid OneDNN usage for the platforms unknown to OneDNN
+    // This is required to guarantee some level of forward compatibility for the new HW generations
+    // as OneDNN code generators are not generic and typically requires some updates for the new architectures
+    // Ideally, we shouldn't do that as OCL impls sometimes also check this flag, but in order to avoid that
+    // we need to ensure that graph transformations are not relying on this flag as indicator that onednn will be used
+    if (product.family == ngen::ProductFamily::Unknown) {
+        info.supports_immad = false;
+    }
+#else  // ENABLE_ONEDNN_FOR_GPU
+    info.arch = gpu_arch::unknown;
+#endif  // ENABLE_ONEDNN_FOR_GPU
 
     return info;
 }
@@ -331,8 +372,10 @@ ocl_device::ocl_device(const cl::Device dev, const cl::Context& ctx, const cl::P
 : _context(ctx)
 , _device(dev)
 , _platform(platform)
-, _info(init_device_info(dev))
-, _mem_caps(init_memory_caps(dev, _info)) { }
+, _info(init_device_info(dev, ctx))
+, _mem_caps(init_memory_caps(dev, _info))
+, _usm_helper(new cl::UsmHelper(_context, _device, use_unified_shared_memory())) {
+}
 
 bool ocl_device::is_same(const device::ptr other) {
     auto casted = downcast<ocl_device>(other.get());
@@ -340,6 +383,10 @@ bool ocl_device::is_same(const device::ptr other) {
         return false;
 
     return _device == casted->get_device() && _platform == casted->get_platform();
+}
+
+void ocl_device::set_mem_caps(memory_capabilities memory_capabilities) {
+    _mem_caps = memory_capabilities;
 }
 
 }  // namespace ocl

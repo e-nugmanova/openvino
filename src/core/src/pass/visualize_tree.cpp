@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2024 Intel Corporation
+// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
@@ -8,6 +8,7 @@
 #include <fstream>
 
 #include "openvino/cc/pass/itt.hpp"
+#include "openvino/core/graph_util.hpp"
 #include "openvino/core/type.hpp"
 #include "openvino/op/constant.hpp"
 #include "openvino/op/parameter.hpp"
@@ -185,7 +186,7 @@ static void collect_symbol_print_values(const std::shared_ptr<ov::Model>& m,
                                         std::unordered_map<std::shared_ptr<ov::Symbol>, size_t>& symbol_to_number) {
     size_t n = symbol_to_number.size() + 1;
     for (const auto& node : m->get_ops()) {
-        if (auto multi_subgraph_op = std::dynamic_pointer_cast<ov::op::util::MultiSubGraphOp>(node))
+        if (auto multi_subgraph_op = ov::as_type_ptr<ov::op::util::MultiSubGraphOp>(node))
             for (size_t i = 0; i < multi_subgraph_op->get_internal_subgraphs_size(); ++i)
                 if (const auto& sub_graph = multi_subgraph_op->get_function(i))
                     collect_symbol_print_values(sub_graph, symbol_to_number);
@@ -241,7 +242,7 @@ bool ov::pass::VisualizeTree::run_on_model(const std::shared_ptr<ov::Model>& f) 
 
     for (auto it = nodes.rbegin(); it != nodes.rend(); ++it) {
         auto& node = *it;
-        if (auto multi_subgraph_op = std::dynamic_pointer_cast<op::util::MultiSubGraphOp>(node)) {
+        if (auto multi_subgraph_op = ov::as_type_ptr<op::util::MultiSubGraphOp>(node)) {
             for (size_t i = 0; i < multi_subgraph_op->get_internal_subgraphs_size(); ++i)
                 if (const auto& sub_graph = multi_subgraph_op->get_function(i))
                     ov::pass::VisualizeTree(name_of_subgraph_file(multi_subgraph_op, m_name, i),
@@ -446,7 +447,6 @@ static std::string get_value(const std::shared_ptr<ov::op::v0::Constant>& consta
     std::stringstream ss;
     ss << "[ ";
     switch (constant->get_output_element_type(0)) {
-    case ov::element::Type_t::undefined:
     case ov::element::Type_t::dynamic:
     case ov::element::Type_t::u1:
     case ov::element::Type_t::u2:
@@ -457,6 +457,8 @@ static std::string get_value(const std::shared_ptr<ov::op::v0::Constant>& consta
     case ov::element::Type_t::i4:
     case ov::element::Type_t::f8e4m3:
     case ov::element::Type_t::f8e5m2:
+    case ov::element::Type_t::f4e2m1:
+    case ov::element::Type_t::f8e8m0:
         ss << constant->get_output_element_type(0).get_type_name() << " value";
         break;
     case ov::element::Type_t::bf16:
@@ -538,15 +540,7 @@ std::string ov::pass::VisualizeTree::get_constant_value(std::shared_ptr<Node> no
     ss << pretty_partial_shape(node->get_output_partial_shape(0), m_symbol_to_name);
 
     if (const auto& constant = ov::as_type_ptr<ov::op::v0::Constant>(node)) {
-        std::string value;
-        try {
-            value = get_value(constant, max_elements);
-        } catch (ov::AssertFailure& ex) {
-            value = std::string("ov::AssertFailure: ") + ex.what();
-        } catch (std::exception& ex) {
-            value = ex.what();
-        }
-        ss << "\nvalue: " << value;
+        ss << "\nvalue: " << get_value(constant, max_elements);
     }
     return ss.str();
 }
@@ -696,8 +690,11 @@ void ov::pass::VisualizeTree::render() const {
         out.close();
 
         if (!m_dot_only && ov::util::to_lower(ext) != ".dot") {
-#ifndef _WIN32
+#if defined(ENABLE_OPENVINO_DEBUG) && !defined(_WIN32)
             std::stringstream ss;
+            if (system("command -v dot > /dev/null 2>&1") != 0) {
+                OPENVINO_THROW("Graphviz 'dot' command not found in PATH");
+            }
             ss << "dot -T" << output_format << " " << dot_file << " -o" << m_name;
             auto cmd = ss.str();
             auto stream = popen(cmd.c_str(), "r");

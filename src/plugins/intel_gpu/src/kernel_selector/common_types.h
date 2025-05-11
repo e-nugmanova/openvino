@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2024 Intel Corporation
+// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
@@ -15,6 +15,9 @@ enum class KernelType {
     UNKNOWN,
     ARG_MAX_MIN,
     BEAM_TABLE_UPDATE,
+    PA_KV_CACHE_UPDATE,
+    PA_KV_CACHE_ROTATE,
+    PA_SDPA,
     CONVOLUTION,
     DECONVOLUTION,
     DFT,
@@ -34,13 +37,14 @@ enum class KernelType {
     COUNT_NONZERO,
     GATHER_NONZERO,
     GROUP_NORMALIZATION,
+    GRU_SEQ_CELL,
     PERMUTE,
     CONCATENATION,
     RESAMPLE,
     REGION_YOLO,
     REORG_YOLO,
     MVN,
-    LSTM_ELT,
+    LSTM_SEQ_CELL,
     BORDER,
     TILE,
     SELECT,
@@ -77,6 +81,7 @@ enum class KernelType {
     EXTRACT_IMAGE_PATCHES,
     LOOP,
     NON_MAX_SUPPRESSION,
+    NON_MAX_SUPPRESSION_GATHER,
     DETECTION_OUTPUT,
     EXPERIMENTAL_DETECTRON_DETECTION_OUTPUT,
     EXPERIMENTAL_DETECTRON_GENERATE_PROPOSALS_SINGLE_IMAGE,
@@ -97,7 +102,12 @@ enum class KernelType {
     UNIQUE_GATHER,
     RMS,
     SWIGLU,
-    ROPE
+    ROPE,
+    DYNAMIC_QUANTIZE,
+    SEARCH_SORTED,
+    STFT,
+    ISTFT,
+    COL2IM
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -116,6 +126,7 @@ enum class Datatype {
     INT64,
     F16,
     F32,
+    BF16,
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -129,7 +140,8 @@ enum class WeightsType {
     UINT8,
     UINT4,
     INT4,
-    INT32
+    INT32,
+    BF16
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -300,6 +312,11 @@ enum class EltwiseMode {
     IS_FINITE,
     IS_INF,
     IS_NAN,
+    RIGHT_SHIFT,
+    LEFT_SHIFT,
+    BITWISE_AND,
+    BITWISE_OR,
+    BITWISE_XOR
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

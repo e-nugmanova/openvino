@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2024 Intel Corporation
+// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
@@ -26,6 +26,10 @@
 //       -----------
 
 #include "custom/subgraph_tests/include/undefined_et.hpp"
+#include "utils/precision_support.h"
+#include "openvino/op/convert.hpp"
+#include "openvino/op/logical_not.hpp"
+#include "openvino/op/random_uniform.hpp"
 
 namespace ov {
 namespace test {
@@ -74,6 +78,12 @@ void UndefinedEtSubgraphTest::SetUp() {
     auto logical_not = std::make_shared<op::v1::LogicalNot>(cvt_f32);
 
     function = std::make_shared<ov::Model>(OutputVector{logical_not->output(0)}, ParameterVector{param_0, param_1, param_2}, "UndefinedET");
+
+    // TODO: Need to remove when the hardware checking for f16 will be eliminated in the Transformations pipeline.
+    if (m_data_et == element::f16 && !ov::intel_cpu::hasHardwareSupport(m_data_et)) {
+        abs_threshold = 1.f;
+        rel_threshold = 0.1f;
+    }
 }
 
 template<typename TD, typename TS>
@@ -142,10 +152,14 @@ TEST_P(UndefinedEtSubgraphTest, CompareWithRefs) {
     }
 
     ASSERT_EQ(compiledModel.get_property(ov::hint::execution_mode), m_mode);
-    ASSERT_EQ(compiledModel.get_property(ov::hint::inference_precision), element::undefined);
+    ASSERT_EQ(compiledModel.get_property(ov::hint::inference_precision), element::dynamic);
 
     size_t rnd_unfm_counter = 0lu;
     size_t logical_not_counter = 0lu;
+    auto expected_dt = m_data_et;
+    if (!ov::intel_cpu::hasHardwareSupport(expected_dt)) {
+        expected_dt = element::f32;
+    }
     for (const auto& node : compiledModel.get_runtime_model()->get_ops()) {
         auto rt_info = node->get_rt_info();
         auto it = rt_info.find(exec_model_info::LAYER_TYPE);
@@ -153,7 +167,7 @@ TEST_P(UndefinedEtSubgraphTest, CompareWithRefs) {
         auto op_name = it->second.as<std::string>();
 
         if (op_name == "RandomUniform") {
-            ASSERT_EQ(node->get_output_element_type(0), m_data_et);
+            ASSERT_EQ(node->get_output_element_type(0), expected_dt);
             rnd_unfm_counter++;
         }
         if (op_name == "Eltwise") {

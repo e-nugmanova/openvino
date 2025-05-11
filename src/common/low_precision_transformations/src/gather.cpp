@@ -1,4 +1,4 @@
-﻿// Copyright (C) 2018-2022 Intel Corporation
+﻿// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
@@ -11,11 +11,14 @@
 #include "low_precision/network_helper.hpp"
 #include "low_precision/rt_info/precision_preserved_attribute.hpp"
 #include "openvino/core/validation_util.hpp"
-#include "openvino/opsets/opset1.hpp"
-#include "openvino/opsets/opset7.hpp"
-#include "openvino/opsets/opset8.hpp"
+#include "openvino/opsets/opset1_decl.hpp"
+#include "openvino/opsets/opset7_decl.hpp"
+#include "openvino/opsets/opset8_decl.hpp"
 #include "openvino/pass/pattern/op/or.hpp"
 #include "openvino/pass/pattern/op/wrap_type.hpp"
+#include "openvino/core/graph_util.hpp"
+#include "openvino/op/broadcast.hpp"
+#include "openvino/op/gather.hpp"
 
 namespace ov {
 namespace pass {
@@ -46,7 +49,7 @@ std::shared_ptr<opset1::Constant> gatherDeqConstant(
 
     const int64_t axis = ov::as_type_ptr<opset1::Constant>(gather->get_input_node_shared_ptr(2))->cast_vector<int64_t>()[0];
     const size_t normalizedAxis =
-        ov::util::normalize_axis(gather->get_friendly_name(), axis, gather->get_input_partial_shape(0).rank());
+        ov::util::try_normalize_axis(axis, gather->get_input_partial_shape(0).rank(), *gather);
 
     // Dequantization channel matches with gather axis
     if (constantShape[normalizedAxis] != 1ul) {
@@ -95,16 +98,16 @@ GatherTransformation::GatherTransformation(const Params& params) : LayerTransfor
         if (transformation_callback(op)) {
             return false;
         }
-        return transform(*context, m);
+        return transform(m);
     };
 
     auto m = std::make_shared<ov::pass::pattern::Matcher>(gather, matcher_name);
     this->register_matcher(m, callback);
 }
 
-bool GatherTransformation::transform(TransformationContext& context, ov::pass::pattern::Matcher &m) {
+bool GatherTransformation::transform(ov::pass::pattern::Matcher &m) {
     auto node = m.get_match_root();
-    if (!canBeTransformed(context, m.get_match_root())) {
+    if (!canBeTransformed(m.get_match_root())) {
         return false;
     }
 
@@ -120,14 +123,14 @@ bool GatherTransformation::transform(TransformationContext& context, ov::pass::p
         replace_node(dequantization.subtractConstant, newConstant);
     }
 
-    const auto newOperation = moveDequantizationAfter(context, gather, NetworkHelper::getDequantization(gather, defaultPrecisions));
+    const auto newOperation = moveDequantizationAfter(gather, NetworkHelper::getDequantization(gather, defaultPrecisions));
 
-    OPENVINO_DEBUG << "LPT: done: " << newOperation;
+    OPENVINO_DEBUG("LPT: done: ", newOperation);
     return true;
 }
 
-bool GatherTransformation::canBeTransformed(const TransformationContext& context, std::shared_ptr<Node> operation) const {
-    if (!LayerTransformation::canBeTransformed(context, operation)) {
+bool GatherTransformation::canBeTransformed(const std::shared_ptr<Node>& operation) const {
+    if (!LayerTransformation::canBeTransformed(operation)) {
         return false;
     }
 
@@ -173,9 +176,8 @@ bool GatherTransformation::canBeTransformed(const TransformationContext& context
             }
         }
         const int64_t axis = axisConstant->cast_vector<int64_t>()[0];
-        const size_t normalizedAxis = ov::util::normalize_axis(operation->get_friendly_name(),
-                                                               axis,
-                                                               operation->get_input_partial_shape(0).rank());
+        const size_t normalizedAxis =
+            ov::util::try_normalize_axis(axis, operation->get_input_partial_shape(0).rank(), *operation);
 
         if (constantShape[normalizedAxis] != 1ul) {
             const auto indicesConstant = ov::as_type_ptr<opset1::Constant>(operation->get_input_node_shared_ptr(1));

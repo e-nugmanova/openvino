@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2024 Intel Corporation
+// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
@@ -6,6 +6,8 @@
 
 #include "openvino/opsets/opset10.hpp"
 #include "snippets/lowered/pass/insert_load_store.hpp"
+#include "snippets/op/load.hpp"
+#include "snippets/op/store.hpp"
 
 namespace ov {
 namespace test {

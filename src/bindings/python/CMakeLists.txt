@@ -1,4 +1,4 @@
-# Copyright (C) 2018-2024 Intel Corporation
+# Copyright (C) 2018-2025 Intel Corporation
 # SPDX-License-Identifier: Apache-2.0
 #
 
@@ -33,28 +33,6 @@ endif()
 
 if(NOT DEFINED OpenVINODeveloperPackage_RELOCATABLE)
     set(OpenVINODeveloperPackage_RELOCATABLE OFF)
-endif()
-
-#
-# Settings for FindPython3.cmake
-#
-
-if(NOT DEFINED Python3_USE_STATIC_LIBS)
-    set(Python3_USE_STATIC_LIBS OFF)
-endif()
-
-if(NOT DEFINED Python3_FIND_VIRTUALENV)
-    set(Python3_FIND_VIRTUALENV FIRST)
-endif()
-
-if(NOT DEFINED Python3_FIND_IMPLEMENTATIONS)
-    set(Python3_FIND_IMPLEMENTATIONS CPython PyPy)
-endif()
-
-if(CMAKE_VERSION VERSION_GREATER_EQUAL 3.18)
-    set(python3_development_component Development.Module)
-else()
-    set(python3_development_component Development)
 endif()
 
 #
@@ -101,7 +79,14 @@ function(ov_check_python_build_conditions)
         set(python_debug OFF)
     endif()
 
-    if((Python3_Development.Module_FOUND OR Python3_Development_FOUND) AND NOT python_debug)
+    set(is_compiler_supported ON)
+    # Python bindings compiled with the 14.28 toolset (19.28 compiler) could not be imported by another Pybind module linked with OpenVINO
+    if(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC" AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 19.29)
+        set(is_compiler_supported OFF)
+        message(${message_mode} "MSVC toolset version 14.28 or lower (19.28 compiler) is not supported. Please update your toolset (${CMAKE_CXX_COMPILER_VERSION}).")
+    endif()
+
+    if((Python3_Development.Module_FOUND OR Python3_Development_FOUND) AND NOT python_debug AND is_compiler_supported)
         set(ENABLE_PYTHON_DEFAULT ON PARENT_SCOPE)
     else()
         set(ENABLE_PYTHON_DEFAULT OFF PARENT_SCOPE)
@@ -137,6 +122,9 @@ set(INIT_FILES_RUNTIME "${OpenVINOPython_SOURCE_DIR}/src/openvino/__init__.py"
 ov_check_init_files_alignment("${INIT_FILES_RUNTIME}")
 
 ov_option(ENABLE_PYTHON "Enables OpenVINO Python API build" ${ENABLE_PYTHON_DEFAULT})
+
+ov_dependent_option (ENABLE_PYTHON_PACKAGING "Enables packaging of Python API in APT / YUM" OFF
+    "ENABLE_PYTHON;LINUX" OFF)
 
 #
 # Check for wheel package
@@ -201,7 +189,7 @@ endif()
 if(CMAKE_CROSSCOMPILING)
     set(pybind11_min_version 2.12.0)
 else()
-    set(pybind11_min_version 2.10.0)
+    set(pybind11_min_version 2.12.0)
 endif()
 # search for FindPython3.cmake instead of legacy modules
 set(PYBIND11_FINDPYTHON ON)
@@ -254,6 +242,7 @@ macro(ov_define_setup_py_packaging_vars)
         WHEEL_VERSION=${WHEEL_VERSION}
         WHEEL_BUILD=${WHEEL_BUILD}
         # build locations
+        OPENVINO_SOURCE_DIR=${OpenVINO_SOURCE_DIR}
         OPENVINO_BINARY_DIR=${OpenVINO_BINARY_DIR}
         OPENVINO_PYTHON_BINARY_DIR=${OpenVINOPython_BINARY_DIR}
         # to create proper directories for BA, OVC tools
@@ -270,7 +259,9 @@ endmacro()
 macro(ov_define_setup_py_dependencies)
     foreach(_target
             # Python API dependencies
-            _pyopenvino py_ov_frontends
+            pyopenvino py_ov_frontends
+            # C API
+            openvino_c
             # plugins
             ov_plugins
             # frontends
@@ -281,10 +272,13 @@ macro(ov_define_setup_py_dependencies)
     endforeach()
 
     file(GLOB_RECURSE openvino_py_files ${OpenVINOPython_SOURCE_DIR}/src/openvino/*.py)
+    file(GLOB_RECURSE openvino_pyi_files ${OpenVINOPython_SOURCE_DIR}/src/openvino/*.pyi)
+    list(APPEND openvino_py_files ${openvino_pyi_files})
 
     list(APPEND ov_setup_py_deps
         ${openvino_py_files}
-        "${CMAKE_CURRENT_SOURCE_DIR}/wheel/setup.py"
+        "${OpenVINO_SOURCE_DIR}/pyproject.toml"
+        "${OpenVINO_SOURCE_DIR}/setup.py"
         "${OpenVINOPython_SOURCE_DIR}/requirements.txt"
         "${OpenVINOPython_SOURCE_DIR}/wheel/readme.txt"
         "${OpenVINO_SOURCE_DIR}/LICENSE"
@@ -329,13 +323,12 @@ if(ENABLE_PYTHON_PACKAGING)
     set(openvino_meta_info_file "${ov_install_lib}/${openvino_meta_info_subdir}/PKG-INFO")
 
     add_custom_command(OUTPUT ${openvino_meta_info_file}
-        COMMAND ${CMAKE_COMMAND} -E remove_directory
-            "${ov_python_package_prefix}"
+        COMMAND ${CMAKE_COMMAND} -E remove_directory "${ov_python_package_prefix}"
         COMMAND ${setup_py_env}
                 # variables to reflect options (extensions only or full wheel package)
                 PYTHON_EXTENSIONS_ONLY=ON
                 SKIP_RPATH=ON
-            "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/wheel/setup.py"
+                "${Python3_EXECUTABLE}" "${OpenVINO_SOURCE_DIR}/setup.py"
                 --no-user-cfg
                 --quiet
                 build
@@ -388,7 +381,7 @@ if(ENABLE_PYTHON_PACKAGING)
     ov_cpack_add_component(${OV_CPACK_COMP_PYTHON_OPENVINO}_package_${pyversion} HIDDEN)
 
     install(DIRECTORY ${ov_python_package_prefix}/ ${telemetry_python_package_prefix}/
-            DESTINATION ${CMAKE_INSTALL_PREFIX}
+            DESTINATION .
             COMPONENT ${OV_CPACK_COMP_PYTHON_OPENVINO_PACKAGE}_${pyversion}
             ${OV_CPACK_COMP_PYTHON_OPENVINO_PACKAGE_EXCLUDE_ALL}
             USE_SOURCE_PERMISSIONS)
@@ -405,6 +398,10 @@ if(ENABLE_TESTS)
             DESTINATION tests/bindings/python
             COMPONENT tests
             EXCLUDE_FROM_ALL)
+    install(FILES requirements_test.txt
+            DESTINATION tests/bindings/python
+            COMPONENT tests
+            EXCLUDE_FROM_ALL)
     install(FILES src/openvino/preprocess/torchvision/requirements.txt
             DESTINATION tests/python/preprocess/torchvision
             COMPONENT tests
@@ -416,4 +413,38 @@ if(OpenVINODeveloperPackage_FOUND)
     include("${OpenVINO_SOURCE_DIR}/cmake/packaging/packaging.cmake")
 
     ov_cpack(${OV_CPACK_COMPONENTS_ALL})
+endif()
+
+# only for developers, skip on CI
+if(NOT (DEFINED ENV{CI} OR DEFINED ENV{TF_BUILD} OR DEFINED ENV{JENKINS_URL}))
+
+    # check pybind11-stubgen package
+    execute_process(COMMAND ${Python3_EXECUTABLE} -m pip show pybind11-stubgen
+                    OUTPUT_VARIABLE pybind11_stubgen_info OUTPUT_STRIP_TRAILING_WHITESPACE
+                    RESULT_VARIABLE pybind11_stubgen_result)
+    string(REGEX MATCH "Version: ([\\.0-9]+)" pybind11_stubgen_version "${pybind11_stubgen_info}")
+    if(pybind11_stubgen_result OR NOT pybind11_stubgen_version)
+        message(WARNING "pybind11-stubgen package is not installed or version is not detected. This package is necessary for developing Python API.")
+    endif()
+
+    # check pre-commit package    
+    execute_process(COMMAND ${Python3_EXECUTABLE} -m pip show pre-commit
+                    OUTPUT_VARIABLE precommit_pkg_info OUTPUT_STRIP_TRAILING_WHITESPACE
+                    RESULT_VARIABLE precommit_pkg_result)
+    string(REGEX MATCH "Version: ([\\.0-9]+)" precommit_pkg_version "${precommit_pkg_info}")
+    if(precommit_pkg_result OR NOT precommit_pkg_version)
+        message(WARNING "pre-commit package is not installed or version is not detected. This package is necessary for developing Python API.")
+    endif()
+
+    # attach the pre-commit hook for Python stub generation
+    execute_process(COMMAND pre-commit install -c "${CMAKE_CURRENT_SOURCE_DIR}/scripts/stub_generation_precommit.yaml"
+                    RESULT_VARIABLE precommit_install_result
+                    ERROR_VARIABLE precommit_install_error
+                    OUTPUT_STRIP_TRAILING_WHITESPACE
+                    ERROR_STRIP_TRAILING_WHITESPACE)
+    if(NOT precommit_install_result EQUAL "0")
+        message(WARNING "Python stub generation pre-commit hook install failed with error: ${precommit_install_error}. It is necessary for developing Python API.")
+    else()
+        message(STATUS "pre-commit hook for Python API stub generation has been installed")
+    endif()
 endif()

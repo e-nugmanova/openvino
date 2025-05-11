@@ -1,4 +1,4 @@
-﻿// Copyright (C) 2018-2024 Intel Corporation
+﻿// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
@@ -11,8 +11,7 @@
 #include <string>
 #include <memory>
 
-namespace ov {
-namespace intel_gpu {
+namespace ov::intel_gpu {
 
 class Plugin : public ov::IPlugin {
 private:
@@ -26,8 +25,10 @@ private:
 
     std::map<std::string, std::shared_ptr<RemoteContextImpl>> get_default_contexts() const;
 
-    std::shared_ptr<ov::Model> clone_and_transform_model(const std::shared_ptr<const ov::Model>& network, const ExecutionConfig& config) const;
-    void transform_model(std::shared_ptr<ov::Model>& model, const ExecutionConfig& config) const;
+    std::shared_ptr<ov::Model> clone_and_transform_model(const std::shared_ptr<const ov::Model>& network,
+                                                         const ExecutionConfig& config,
+                                                         const std::shared_ptr<RemoteContextImpl>& context) const;
+    void transform_model(std::shared_ptr<ov::Model>& model, const ExecutionConfig& config, const std::shared_ptr<RemoteContextImpl>& context) const;
     void register_primitives() const;
     std::string get_device_id_from_config(const ov::AnyMap& config) const;
     std::string get_device_id(const ov::AnyMap& config) const;
@@ -64,5 +65,4 @@ public:
     ov::SoPtr<ov::IRemoteContext> get_default_context(const ov::AnyMap& remote_properties) const override;
 };
 
-}  // namespace intel_gpu
-}  // namespace ov
+}  // namespace ov::intel_gpu

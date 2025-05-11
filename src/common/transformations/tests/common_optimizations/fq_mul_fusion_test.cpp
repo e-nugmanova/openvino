@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2024 Intel Corporation
+// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
@@ -13,7 +13,9 @@
 #include "common_test_utils/ov_test_utils.hpp"
 #include "common_test_utils/test_common.hpp"
 #include "openvino/core/model.hpp"
-#include "openvino/opsets/opset4.hpp"
+#include "openvino/op/fake_quantize.hpp"
+#include "openvino/op/multiply.hpp"
+#include "openvino/opsets/opset4_decl.hpp"
 #include "openvino/pass/manager.hpp"
 #include "transformations/init_node_info.hpp"
 
@@ -77,7 +79,7 @@ TEST_P(FQMulFusion, ExpectFusion) {
     manager.register_pass<ov::pass::CheckUniqueNames>(unh);
 
     manager.run_passes(m_model);
-    ASSERT_NO_THROW(check_rt_info(m_model));
+    OV_ASSERT_NO_THROW(check_rt_info(m_model));
 
     auto fc =
         FunctionsComparator::no_default().enable(FunctionsComparator::PRECISIONS).enable(FunctionsComparator::NODES);
@@ -219,7 +221,7 @@ TEST(FQMulFusion_NonConstInputs, AllInputsNonConst) {
     manager.register_pass<ov::pass::FakeQuantizeMulFusion>();
 
     manager.run_passes(model);
-    ASSERT_NO_THROW(check_rt_info(model));
+    OV_ASSERT_NO_THROW(check_rt_info(model));
 
     const auto res = compare_functions(model, expected_function);
     ASSERT_TRUE(res.first) << res.second;
@@ -253,7 +255,7 @@ TEST(FQMulFusion_NonConstInputs, FQ_out_high_const) {
     manager.register_pass<ov::pass::FakeQuantizeMulFusion>();
 
     manager.run_passes(model);
-    ASSERT_NO_THROW(check_rt_info(model));
+    OV_ASSERT_NO_THROW(check_rt_info(model));
 
     const auto res = compare_functions(model, expected_function);
     ASSERT_TRUE(res.first) << res.second;
@@ -286,7 +288,7 @@ TEST(FQMulFusion_FQ_Mul_inputs, FQ_out_to_mul_input_2) {
     manager.register_pass<ov::pass::FakeQuantizeMulFusion>();
 
     manager.run_passes(model);
-    ASSERT_NO_THROW(check_rt_info(model));
+    OV_ASSERT_NO_THROW(check_rt_info(model));
 
     const auto res = compare_functions(model, expected_function);
     ASSERT_TRUE(res.first) << res.second;
@@ -320,7 +322,7 @@ TEST(FQMulFusion_FQ_Mul_inputs, FQ_out_to_mul_input_2_param) {
     manager.register_pass<ov::pass::FakeQuantizeMulFusion>();
 
     manager.run_passes(model);
-    ASSERT_NO_THROW(check_rt_info(model));
+    OV_ASSERT_NO_THROW(check_rt_info(model));
 
     const auto res = compare_functions(model, expected_function);
     ASSERT_TRUE(res.first) << res.second;
@@ -346,7 +348,7 @@ TEST(TransformationTests, FakeQuantizeMultiplyFusionNegative) {
     manager.register_pass<ov::pass::FakeQuantizeMulFusion>();
 
     manager.run_passes(model);
-    ASSERT_NO_THROW(check_rt_info(model));
+    OV_ASSERT_NO_THROW(check_rt_info(model));
 
     ASSERT_EQ(model->get_output_shape(0), Shape({1, 300, 16}));
 }
@@ -379,7 +381,7 @@ TEST(TransformationTests, FakeQuantizeMultiplyFusionMulConstWithEqualValues) {
     manager.register_pass<ov::pass::FakeQuantizeMulFusion>();
 
     manager.run_passes(model);
-    ASSERT_NO_THROW(check_rt_info(model));
+    OV_ASSERT_NO_THROW(check_rt_info(model));
 
     const auto res = compare_functions(model, expected_function, true);
     ASSERT_TRUE(res.first) << res.second;

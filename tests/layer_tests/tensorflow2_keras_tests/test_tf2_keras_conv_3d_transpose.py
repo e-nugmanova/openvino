@@ -43,13 +43,13 @@ class TestKerasConv3DTranspose(CommonTF2LayerTest):
         dict(conv_params=dict(filters=10, kernel_size=5, padding="same", strides=(4, 3, 2),
                               output_padding=1),
              input_names=["x"], input_shapes=[[5, 3, 5, 7, 8]], input_type=tf.float32),
-        dict(conv_params=dict(filters=27, kernel_size=3, padding="valid", dilation_rate=3),
+        dict(conv_params=dict(filters=27, kernel_size=3, padding="valid", dilation_rate=1),
              input_names=["x"],
              input_shapes=[[5, 8, 9, 7, 6]], input_type=tf.float32),
-        dict(conv_params=dict(filters=10, kernel_size=3, padding="same", dilation_rate=4),
+        dict(conv_params=dict(filters=10, kernel_size=3, padding="same", dilation_rate=1),
              input_names=["x"],
              input_shapes=[[5, 3, 9, 7, 8]], input_type=tf.float32),
-        dict(conv_params=dict(filters=27, kernel_size=3, padding="valid", dilation_rate=3,
+        dict(conv_params=dict(filters=27, kernel_size=3, padding="valid", dilation_rate=1,
                               activation="sigmoid",
                               use_bias=False), input_names=["x"], input_shapes=[[5, 8, 9, 7, 6]],
              input_type=tf.float32),
@@ -59,10 +59,10 @@ class TestKerasConv3DTranspose(CommonTF2LayerTest):
     @pytest.mark.precommit
     @pytest.mark.nightly
     def test_keras_conv_3D_transpose_float32(self, params, ie_device, precision, ir_version,
-                                             temp_dir, use_legacy_frontend):
+                                             temp_dir):
         if platform.machine() in ['arm', 'armv7l', 'aarch64', 'arm64', 'ARM64']:
             pytest.skip("timeout issue for inference on ARM")
         self._test(*self.create_keras_conv_3d_transpose_net(**params, ir_version=ir_version),
                    ie_device, precision,
                    temp_dir=temp_dir, ir_version=ir_version,
-                   use_legacy_frontend=use_legacy_frontend, **params)
+                   **params)

@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2024 Intel Corporation
+// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
@@ -103,7 +103,7 @@ public:
         reorder_network.set_input_data("input0", input0);
         reorder_network.set_input_data("input1", input1);
         auto reorder_output = reorder_network.execute().at("reorder2").get_memory();
-        cldnn::mem_lock<T_dat> reorder_output_ptr(reorder_output, get_test_stream());
+        cldnn::mem_lock<T_dat, mem_lock_type::read> reorder_output_ptr(reorder_output, get_test_stream());
 
         topology planar_topo;
         planar_topo.add(input_layout("input0", input0->get_layout()));
@@ -114,7 +114,7 @@ public:
         planar_network.set_input_data("input0", input0);
         planar_network.set_input_data("input1", input1);
         auto planar_output = planar_network.execute().at("gather").get_memory();
-        cldnn::mem_lock<T_dat> planar_output_ptr(planar_output, get_test_stream());
+        cldnn::mem_lock<T_dat, mem_lock_type::read> planar_output_ptr(planar_output, get_test_stream());
 
         ASSERT_TRUE(
             !memcmp(reorder_output_ptr.data(), planar_output_ptr.data(), get_linear_size(shape_out) * sizeof(T_dat)));
@@ -1205,6 +1205,39 @@ TEST(gather_gpu_fp16, d22_axisF) {
     }
 }
 
+TEST(gather_gpu_fp16, prevent_reorder_to_indices_node) {
+    auto& engine = get_test_engine();
+
+    auto data_layout = layout{ ov::PartialShape{ 4, 1, 6, 2500, 2 }, data_types::f16, format::bfzyx };
+    auto output_layout = layout{ ov::PartialShape{ 4, 1, 6, 2500}, data_types::f16, format::bfyx };
+    auto indices_layout = layout{ ov::PartialShape{ 4, 1 }, data_types::i32, format::bfyx };
+
+    int64_t input_rank = static_cast<int64_t>(data_layout.get_rank());
+    int64_t batch_dims = static_cast<int64_t>(2);
+    int64_t axis = static_cast<int64_t>(4);
+
+    topology topology(
+        input_layout("data", data_layout),
+        input_layout("indices", indices_layout),
+        gather("gather", input_info("data"), input_info("indices"), axis, input_rank, output_layout.get_shape(), batch_dims),
+        reorder("result", input_info("gather"), output_layout)
+    );
+
+    ExecutionConfig config = get_test_default_config(engine);
+    config.set_property(ov::intel_gpu::optimize_data(true));
+
+    auto program = program::build_program(engine, topology, config);
+
+    ASSERT_NE(program, nullptr);
+
+    for (auto dep : program->get_node("gather").get_dependencies()) {
+        ASSERT_NE(dep.first->is_type<reorder>(), true);
+    }
+
+    auto actual_shape = program->get_node("result").get_output_layout().get_partial_shape();
+    ASSERT_EQ(output_layout.get_partial_shape(), actual_shape);
+}
+
 TEST(gather_gpu_fp32, d14_axisB) {
     //  Dictionary : 2x2x1x1
     //  Indexes : 1x4x1x1
@@ -2049,6 +2082,46 @@ TEST(gather_cpu_impl_fp32, dynamic_322_axisF) {
     }
 }
 
+TEST(gather_cpu_fp32, indice_out_of_bound_disable_usm) {
+    auto engine = create_test_engine(engine_types::ocl, runtime_types::ocl, false);
+
+    ov::Shape in1_shape = { 3, 3 };
+    ov::Shape in2_shape = { 2, 2 };
+    auto in1_layout = layout{in1_shape, data_types::f32, format::bfyx};
+    auto in2_layout = layout{in2_shape, data_types::i32, format::bfyx};
+    auto input1 = engine->allocate_memory(layout{ov::PartialShape(in1_shape), data_types::f32, format::bfyx}); // data
+    auto input2 = engine->allocate_memory(layout{ov::PartialShape(in2_shape), data_types::i32, format::bfyx}); // Indexes
+
+    int64_t axis = 1;
+    set_values(input1, {0, 1, 2, 10, 11, 12, 20, 21, 22 });
+    set_values(input2, {1, 0, 2, 3});
+
+    topology topology;
+    topology.add(input_layout("input1", in1_layout));
+    topology.add(input_layout("input2", in2_layout));
+    topology.add(gather("gather", input_info("input1"), input_info("input2"), axis, 0, ov::Shape{}, 0, true));
+
+    ExecutionConfig config = get_test_default_config(*engine);
+    config.set_property(ov::intel_gpu::allow_new_shape_infer(true));
+    config.set_property(ov::intel_gpu::force_implementations(ov::intel_gpu::ImplForcingMap{ {"gather", {format::bfyx, "", impl_types::cpu}} }));
+
+    network network(*engine, topology, config);
+    network.set_input_data("input1", input1);
+    network.set_input_data("input2", input2);
+
+    auto outputs = network.execute();
+
+    auto output = outputs.at("gather").get_memory();
+    cldnn::mem_lock<int> output_ptr(output, get_test_stream());
+
+    std::vector<int> expected_results = {1, 0, 2, 0,  11, 10, 12, 0,  21, 20, 22, 0};
+
+    ASSERT_EQ(expected_results.size(), output_ptr.size());
+    for (size_t i = 0; i < expected_results.size(); ++i) {
+        ASSERT_EQ(expected_results[i], output_ptr[i]) << i;
+    }
+}
+
 template <typename T>
 void test_gather_gpu_u8_322_axisF(bool is_caching_test) {
     //  Dictionary : 3x3x1x1
@@ -2340,6 +2413,51 @@ TEST(gather_gpu_fp32, dynamic_support_neg_ind) {
 
     auto data_mem = engine.allocate_memory(layout{ov::PartialShape(data_shape), data_types::f32, format::bfyx});
     auto indices_mem = engine.allocate_memory(layout{ov::PartialShape(indices_shape), data_types::i32, format::bfyx});
+
+    set_values(data_mem, { 0.f, 1.f, 2.f, 3.f, 4.f, 5.f, 6.f, 7.f, 8.f });
+    set_values(indices_mem, { -1 });
+
+    topology topology;
+    topology.add(input_layout("data", data_layout));
+    topology.add(input_layout("indices", indices_layout));
+    topology.add(gather("gather", input_info("data"), input_info("indices"), axis, data_shape.size(), ov::Shape{}, 0, true));
+
+    ExecutionConfig config = get_test_default_config(engine);
+    config.set_property(ov::intel_gpu::allow_new_shape_infer(true));
+    network network(engine, topology, config);
+
+    network.set_input_data("data", data_mem);
+    network.set_input_data("indices", indices_mem);
+
+    auto inst = network.get_primitive("gather");
+    auto impl = inst->get_impl();
+    ASSERT_TRUE(impl != nullptr);
+    ASSERT_TRUE(impl->is_dynamic());
+
+    auto outputs = network.execute();
+
+    auto output = outputs.at("gather").get_memory();
+    cldnn::mem_lock<float> output_ptr(output, get_test_stream());
+
+    std::vector<float> expected_results = { 2.f, 5.f, 8.f };
+
+    ASSERT_EQ(expected_results.size(), output_ptr.size());
+    for (size_t i = 0; i < expected_results.size(); ++i) {
+        ASSERT_EQ(expected_results[i], output_ptr[i]) << i;
+    }
+}
+
+TEST(gather_gpu_fp32, dynamic_support_scalar_indice_empty_memory) {
+    auto& engine = get_test_engine();
+
+    ov::Shape data_shape = { 3, 3 };
+    int64_t axis = 1;
+
+    auto data_layout = layout{ov::PartialShape::dynamic(data_shape.size()), data_types::f32, format::bfyx};
+    auto indices_layout = layout{ov::PartialShape({1}), data_types::i32, format::bfyx};
+
+    auto data_mem = engine.allocate_memory(layout{ov::PartialShape(data_shape), data_types::f32, format::bfyx});
+    auto indices_mem = engine.allocate_memory(layout{ov::PartialShape({}), data_types::i32, format::bfyx});
 
     set_values(data_mem, { 0.f, 1.f, 2.f, 3.f, 4.f, 5.f, 6.f, 7.f, 8.f });
     set_values(indices_mem, { -1 });

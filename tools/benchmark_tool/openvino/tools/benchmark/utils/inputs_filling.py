@@ -1,4 +1,4 @@
-# Copyright (C) 2018-2024 Intel Corporation
+# Copyright (C) 2018-2025 Intel Corporation
 # SPDX-License-Identifier: Apache-2.0
 
 import os
@@ -10,8 +10,8 @@ from collections import defaultdict
 from pathlib import Path
 from importlib.util import find_spec
 
-from openvino.runtime import Tensor, PartialShape, Type
-from openvino.runtime.utils.types import get_dtype
+from openvino import Tensor, PartialShape, Type
+from openvino.utils.types import get_dtype
 
 from .constants import IMAGE_EXTENSIONS, NUMPY_EXTENSIONS, BINARY_EXTENSIONS
 from .logging import logger
@@ -266,7 +266,7 @@ def get_numpy_tensors(numpy_paths: List[str], info: AppInputInfo, batch_sizes: L
                 else:
                     try:
                         if info.layout.has_name("N"):
-                            numpy_arrays[[None] * info.layout.get_index_by_name("N") + [b]] = numpy_arr
+                            numpy_arrays[[None] * info.layout.get_index_by_name("N") + [b]] = numpy_arr[b]
                         else:
                             numpy_arrays = numpy_arr
                     except ValueError:
@@ -308,7 +308,7 @@ def get_binary_tensors(binary_paths: List[str], info: AppInputInfo, batch_sizes:
                         f"File {binary_filename} contains {binary_file_bit_size} bites but model expects {blob_bit_size}")
                 from_file = np.fromfile(binary_filename, dtype)
                 if info.layout.has_name("N"):
-                    binaries[[None] * info.layout.get_index_by_name("N") + [b]] = from_file
+                    binaries[[None] * info.layout.get_index_by_name("N") + [b]] = from_file[b]
                 else:
                     binaries = from_file
             else:

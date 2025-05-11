@@ -5,6 +5,7 @@
 #include "transformations/common_optimizations/concat_to_broadcast.hpp"
 
 #include "itt.hpp"
+#include "openvino/core/graph_util.hpp"
 #include "openvino/op/broadcast.hpp"
 #include "openvino/op/concat.hpp"
 #include "openvino/op/tile.hpp"
@@ -15,7 +16,7 @@
 static bool use_broadcast(const std::shared_ptr<ov::op::v0::Concat>& concat) {
     const auto& output = concat->output(0);
     const auto& input = concat->input(0);
-    const auto& input_concat_dim = input.get_partial_shape()[concat->get_concatenation_axis()];
+    const auto& input_concat_dim = input.get_partial_shape()[concat->get_axis()];
 
     return input_concat_dim.is_static() && input_concat_dim.get_length() == 1 && output.get_partial_shape().is_static();
 }
@@ -45,7 +46,7 @@ ov::pass::ConcatToBroadcast::ConcatToBroadcast() {
         const auto& pattern_map = m.get_pattern_value_map();
 
         auto root_node = pattern_map.at(concat_label).get_node_shared_ptr();
-        auto concat = std::dynamic_pointer_cast<op::v0::Concat>(root_node);
+        auto concat = ov::as_type_ptr<op::v0::Concat>(root_node);
         if (!concat) {
             return false;
         }

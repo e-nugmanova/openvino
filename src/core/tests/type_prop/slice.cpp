@@ -1,12 +1,15 @@
-// Copyright (C) 2018-2024 Intel Corporation
+// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
+
+#include "openvino/op/slice.hpp"
 
 #include <numeric>
 
 #include "common_test_utils/test_assertions.hpp"
 #include "common_test_utils/type_prop.hpp"
-#include "openvino/opsets/opset9.hpp"
+#include "openvino/op/broadcast.hpp"
+#include "openvino/op/subtract.hpp"
 #include "sequence_generator.hpp"
 
 using namespace ov;
@@ -1021,14 +1024,14 @@ TEST(type_prop, slice_v8_basic_const_inputs_out_axes_val) {
         std::vector<std::vector<int32_t>> input_vals{start_val, stop_val, step_val, axes_val};
         OV_EXPECT_THROW(const auto op = make_slice_op_const_inputs(input_vals, data_shape, et),
                         NodeValidationFailure,
-                        HasSubstr("axis -20 out of the tensor rank range [-8, 7]"));
+                        HasSubstr("Axis -20 out of the tensor rank range [-8, 7]"));
     }
     {
         std::vector<int32_t> axes_val{2, 0, 9, 7, 1, 20, 6, 4};
         std::vector<std::vector<int32_t>> input_vals{start_val, stop_val, step_val, axes_val};
         OV_EXPECT_THROW(const auto op = make_slice_op_const_inputs(input_vals, data_shape, et),
                         NodeValidationFailure,
-                        HasSubstr("axis 9 out of the tensor rank range [-8, 7]"));
+                        HasSubstr("Axis 9 out of the tensor rank range [-8, 7]"));
     }
 
     const auto data = std::make_shared<op::v0::Parameter>(et, data_shape);
@@ -1039,7 +1042,7 @@ TEST(type_prop, slice_v8_basic_const_inputs_out_axes_val) {
 
     OV_EXPECT_THROW(const auto op = std::make_shared<op::v8::Slice>(data, start, stop, step, axes),
                     NodeValidationFailure,
-                    HasSubstr("axis -15 out of the tensor rank range [-8, 7]"));
+                    HasSubstr("Axis -15 out of the tensor rank range [-8, 7]"));
 }
 
 TEST(type_prop, slice_v8_basic_const_inputs_step_zero) {
@@ -1239,20 +1242,20 @@ INSTANTIATE_TEST_SUITE_P(type_prop,
                                 SliceV8IntervalParams({{10, 1024}}, {{20, 30}}, {{10, 15}}, 0, 0, -2, {{0, 10}})));
 
 TEST_P(SliceV8IntervalTest, start_stop_as_interval) {
-    using namespace ov::opset9;
-
-    const auto p_start = std::make_shared<Parameter>(element::i64, start_shape);
-    const auto shape_of_start = std::make_shared<ShapeOf>(p_start);
+    const auto p_start = std::make_shared<op::v0::Parameter>(element::i64, start_shape);
+    const auto shape_of_start = std::make_shared<op::v3::ShapeOf>(p_start);
     const auto start =
-        std::make_shared<Subtract>(shape_of_start, Constant::create(element::i64, Shape{1}, {start_offset}));
+        std::make_shared<op::v1::Subtract>(shape_of_start,
+                                           op::v0::Constant::create(element::i64, Shape{1}, {start_offset}));
 
-    const auto p_stop = std::make_shared<Parameter>(element::i64, stop_shape);
-    const auto shape_of_stop = std::make_shared<ShapeOf>(p_stop);
+    const auto p_stop = std::make_shared<op::v0::Parameter>(element::i64, stop_shape);
+    const auto shape_of_stop = std::make_shared<op::v3::ShapeOf>(p_stop);
     const auto stop =
-        std::make_shared<Subtract>(shape_of_stop, Constant::create(element::i64, Shape{1}, {stop_offset}));
+        std::make_shared<op::v1::Subtract>(shape_of_stop,
+                                           op::v0::Constant::create(element::i64, Shape{1}, {stop_offset}));
 
-    const auto data = std::make_shared<Parameter>(element::f32, data_shape);
-    const auto steps = Constant::create(element::i64, Shape{1}, {step});
+    const auto data = std::make_shared<op::v0::Parameter>(element::f32, data_shape);
+    const auto steps = op::v0::Constant::create(element::i64, Shape{1}, {step});
 
     const auto op = make_op(data, start, stop, steps);
 

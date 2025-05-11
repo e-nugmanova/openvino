@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2024 Intel Corporation
+// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
@@ -10,10 +10,10 @@ namespace ov {
 namespace test {
 namespace behavior {
 
-INSTANTIATE_TEST_SUITE_P(smoke_BehaviorTests, VersionTests, ::testing::Values(ov::test::utils::DEVICE_NPU),
+INSTANTIATE_TEST_SUITE_P(compatibility_smoke_BehaviorTests, VersionTests, ::testing::Values(ov::test::utils::DEVICE_NPU),
                          (ov::test::utils::appendPlatformTypeTestName<VersionTests>));
 
-INSTANTIATE_TEST_SUITE_P(smoke_Hetero_BehaviorTests, VersionTests, ::testing::Values(ov::test::utils::DEVICE_HETERO),
+INSTANTIATE_TEST_SUITE_P(compatibility_smoke_Hetero_BehaviorTests, VersionTests, ::testing::Values(ov::test::utils::DEVICE_HETERO),
                          (ov::test::utils::appendPlatformTypeTestName<VersionTests>));
 
 }  // namespace behavior

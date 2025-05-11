@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2024 Intel Corporation
+// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
@@ -49,9 +49,8 @@ struct gemm : public primitive_base<gemm> {
          const float alpha = 1.0f,
          const float beta = 0.0f,
          const size_t input_rank = 4,
-         const size_t weight_rank = 4,
-         const padding& output_padding = padding())
-        : primitive_base(id, inputs, {output_padding}, {optional_data_type{ data_type }}),
+         const size_t weight_rank = 4)
+        : primitive_base(id, inputs, 1, {optional_data_type{ data_type }}),
           transpose_input0(transpose_input0 ? 1 : 0),
           transpose_input1(transpose_input1 ? 1 : 0),
           alpha(alpha),
@@ -90,9 +89,8 @@ struct gemm : public primitive_base<gemm> {
          const std::vector<int64_t>& input1_transpose_order = {0, 1, 2, 3},
          const std::vector<int64_t>& output_transpose_order = {},
          const float alpha = 1.0f,
-         const float beta = 0.0f,
-         const padding& output_padding = padding())
-        : primitive_base(id, inputs, {output_padding}, {optional_data_type{ data_type }}),
+         const float beta = 0.0f)
+        : primitive_base(id, inputs, 1, {optional_data_type{ data_type }}),
           input0_transpose_order(input0_transpose_order),
           input1_transpose_order(input1_transpose_order),
           output_transpose_order(output_transpose_order),
@@ -119,9 +117,8 @@ struct gemm : public primitive_base<gemm> {
          bool indirect_b,
          int64_t indirect_axis,
          const float alpha = 1.0f,
-         const float beta = 0.0f,
-         const padding& output_padding = padding())
-        : primitive_base(id, inputs, {output_padding}, {optional_data_type{ data_type }}),
+         const float beta = 0.0f)
+        : primitive_base(id, inputs, 1, {optional_data_type{ data_type }}),
           input0_transpose_order(input0_transpose_order),
           input1_transpose_order(input1_transpose_order),
           output_transpose_order(output_transpose_order),
@@ -234,10 +231,15 @@ struct gemm : public primitive_base<gemm> {
         ib >> beam_table.idx;
     }
 
-    std::vector<input_info> get_dependencies() const override {
+protected:
+    std::map<size_t, const input_info*> get_dependencies_map() const override {
+        auto ret = std::map<size_t, const input_info*>{};
+        auto idx = input.size();
+
         if (beam_table.is_valid())
-            return { beam_table };
-        return {};
+            ret[idx++] = &beam_table;
+
+        return ret;
     }
 
 private:

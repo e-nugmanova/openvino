@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2024 Intel Corporation
+// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
@@ -12,11 +12,13 @@
 #include <string>
 #include <iterator>
 #include <climits>
+#include <variant>
 
 #include "Python.h"
 #include "openvino/core/type/element_type.hpp"
 #include "openvino/runtime/compiled_model.hpp"
 #include "openvino/runtime/infer_request.hpp"
+#include "openvino/runtime/shared_buffer.hpp"
 #include "openvino/runtime/tensor.hpp"
 #include "openvino/pass/serialize.hpp"
 #include "pyopenvino/graph/any.hpp"
@@ -113,16 +115,16 @@ py::array array_from_constant_view(ov::op::v0::Constant&& c);
 }; // namespace array_helpers
 
 namespace constant_helpers {
+std::vector<size_t> _get_byte_strides(const ov::Shape& s, size_t element_byte_size);
+
 template <typename T>
 std::vector<size_t> _get_byte_strides(const ov::Shape& s) {
-    auto byte_strides = ov::row_major_strides(s);
-    for (auto&& stride : byte_strides) {
-        stride *= sizeof(T);
-     }
-    return byte_strides;
+    return _get_byte_strides(s, sizeof(T));
 }
 
 std::vector<size_t> _get_strides(const ov::op::v0::Constant& self);
+
+std::shared_ptr<ov::SharedBuffer<py::array>> get_shared_memory(py::array& array);
 
 }; // namespace constant_helpers
 
@@ -185,6 +187,10 @@ std::string get_simple_repr(const T& obj) {
     std::string class_name = get_class_name(obj);
     return "<" + class_name + ">";
 }
+
+typedef std::variant<std::shared_ptr<ov::Node>, int64_t, double, py::array> NodeInput;
+
+std::shared_ptr<ov::Node> node_from_input_value(NodeInput& input);
 
 // Use only with classes that are not creatable by users on Python's side, because
 // Objects created in Python that are wrapped with such wrapper will cause memory leaks.

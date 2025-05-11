@@ -69,10 +69,9 @@ struct adaptive_pooling : public primitive_base<adaptive_pooling> {
                      const input_info &input,
                      const input_info &output_shape,
                      data_types index_element_type,
-                     const padding& output_padding = padding(),
                      data_types output_data_type = data_types::i32,
                      const size_t num_outputs = 1)
-            : primitive_base(id, {input, output_shape}, {output_padding}, {optional_data_type{output_data_type}}, num_outputs),
+            : primitive_base(id, {input, output_shape}, num_outputs, {optional_data_type{output_data_type}}),
               mode{adaptive_pooling_mode::max},
               output_size{tensor(0)},
               indices_output{""},
@@ -80,14 +79,14 @@ struct adaptive_pooling : public primitive_base<adaptive_pooling> {
 
     adaptive_pooling_mode mode;
     tensor output_size;
-    primitive_id indices_output;
+    input_info indices_output;
     data_types index_element_type{data_types::i64};
 
     size_t hash() const override {
         size_t seed = primitive::hash();
         seed = hash_combine(seed, mode);
         seed = hash_combine(seed, index_element_type);
-        seed = hash_combine(seed, indices_output.empty());
+        seed = hash_combine(seed, indices_output.is_valid());
         return seed;
     }
 
@@ -119,10 +118,13 @@ struct adaptive_pooling : public primitive_base<adaptive_pooling> {
     }
 
 protected:
-    std::vector<input_info> get_dependencies() const override {
-        std::vector<input_info> ret;
-        if (!indices_output.empty())
-            ret.push_back(indices_output);
+    std::map<size_t, const input_info*> get_dependencies_map() const override {
+        auto ret = std::map<size_t, const input_info*>{};
+        auto idx = input.size();
+
+        if (indices_output.is_valid())
+            ret[idx++] = &indices_output;
+
         return ret;
     }
 };

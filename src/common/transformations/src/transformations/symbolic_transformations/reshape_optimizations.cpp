@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2024 Intel Corporation
+// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
@@ -19,11 +19,8 @@ using namespace ov::symbol::util;
 ov::pass::ReshapeOptimizations::ReshapeOptimizations() {
     MATCHER_SCOPE(ReshapeOptimizations);
     auto data_label = pattern::any_input(pattern::has_static_rank());
-    auto pattern_label = pattern::any_input([](const Output<Node>& output) {
-        return pattern::has_static_shape() && !ov::as_type_ptr<v0::Constant>(output.get_node_shared_ptr());
-    });
-    auto reshape_label =
-        ov::pass::pattern::wrap_type<op::v1::Reshape>({data_label, pattern_label}, pattern::has_static_rank());
+    auto pattern_label = pattern::any_input(pattern::has_static_shape() && pattern::class_other_than<v0::Constant>());
+    auto reshape_label = pattern::wrap_type<op::v1::Reshape>({data_label, pattern_label}, pattern::has_static_rank());
 
     ov::matcher_pass_callback matcher_pass_callback = [](pattern::Matcher& m) {
         const auto& reshape = ov::as_type_ptr<v1::Reshape>(m.get_match_root());
@@ -34,16 +31,23 @@ ov::pass::ReshapeOptimizations::ReshapeOptimizations() {
         const auto& out_shape = reshape->get_output_partial_shape(0);
         const auto& out_rank = out_shape.size();
 
+        int64_t cnt_static_zeros = 0;
         std::vector<int64_t> output_pattern(out_rank, -1);
         for (size_t i = 0; i < out_rank; ++i) {
-            if (out_shape[i].is_static())
+            if (out_shape[i].is_static()) {
                 output_pattern[i] = out_shape[i].get_length();
-            else if (i >= in_rank)
+                if (output_pattern[i] == 0) {
+                    ++cnt_static_zeros;
+                }
+            } else if (i >= in_rank) {
                 break;
-            else if (dims_are_equal(in_shape[i], out_shape[i]))
+            } else if (dims_are_equal(in_shape[i], out_shape[i])) {
                 output_pattern[i] = 0;
+            }
         }
-        if (std::count(output_pattern.begin(), output_pattern.end(), -1) <= 1) {
+
+        int64_t cnt_neg_ones = std::count(output_pattern.begin(), output_pattern.end(), -1);
+        if (cnt_neg_ones == 0 || (cnt_neg_ones == 1 && cnt_static_zeros == 0)) {
             auto new_pattern = ov::op::v0::Constant::create(element::i64, Shape{output_pattern.size()}, output_pattern);
             ov::copy_runtime_info(reshape->get_input_node_shared_ptr(1), new_pattern);
             reshape->set_special_zero(true);

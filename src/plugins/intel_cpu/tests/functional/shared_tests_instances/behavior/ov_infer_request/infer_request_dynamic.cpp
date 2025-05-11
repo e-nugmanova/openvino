@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2024 Intel Corporation
+// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
@@ -6,16 +6,15 @@
 
 #include "common_test_utils/node_builders/constant.hpp"
 #include "common_test_utils/node_builders/eltwise.hpp"
+#include "openvino/op/concat.hpp"
+#include "openvino/op/relu.hpp"
+#include "openvino/op/split.hpp"
 
 using namespace ov::test::behavior;
 
 namespace {
 
 const std::vector<ov::AnyMap> configs = {{{ov::hint::inference_precision.name(), ov::element::f32}}};
-
-const std::vector<ov::AnyMap> HeteroConfigs = {
-    {{ov::hint::inference_precision.name(), ov::element::f32}, {ov::device::priorities(ov::test::utils::DEVICE_CPU)}},
-};
 
 std::shared_ptr<ov::Model> getFunction1() {
     const std::vector<size_t> inputShape = {1, 4, 20, 20};
@@ -32,7 +31,7 @@ std::shared_ptr<ov::Model> getFunction1() {
     auto relu2 = std::make_shared<ov::op::v0::Relu>(add->output(0));
     relu2->get_output_tensor(0).set_names({"relu2"});
 
-    ov::NodeVector results{relu1, relu2};
+    ov::OutputVector results{relu1, relu2};
     return std::make_shared<ov::Model>(results, params, "AddTwoOutputEdges");
 }
 
@@ -81,16 +80,5 @@ INSTANTIATE_TEST_SUITE_P(
                            {{2, 4, 20, 20}, {2, 2, 20, 40}}}),
                        ::testing::Values(ov::test::utils::DEVICE_CPU),
                        ::testing::ValuesIn(configs)),
-    OVInferRequestDynamicTests::getTestCaseName);
-
-INSTANTIATE_TEST_SUITE_P(
-    smoke_Hetero_BehaviorTests,
-    OVInferRequestDynamicTests,
-    ::testing::Combine(::testing::Values(getFunction2()),
-                       ::testing::Values(std::vector<std::pair<std::vector<size_t>, std::vector<size_t>>>{
-                           {{1, 4, 20, 20}, {1, 2, 20, 40}},
-                           {{2, 4, 20, 20}, {2, 2, 20, 40}}}),
-                       ::testing::Values(ov::test::utils::DEVICE_HETERO),
-                       ::testing::ValuesIn(HeteroConfigs)),
     OVInferRequestDynamicTests::getTestCaseName);
 }  // namespace

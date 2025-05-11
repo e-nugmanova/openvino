@@ -1,4 +1,4 @@
-﻿// Copyright (C) 2018-2024 Intel Corporation
+﻿// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
@@ -49,6 +49,11 @@ uint32_t GetNumberOfInputs(EltwiseMode m) {
         case EltwiseMode::LOGIC_XOR:
         case EltwiseMode::SQUARED_DIFF:
         case EltwiseMode::FLOOR_MOD:
+        case EltwiseMode::RIGHT_SHIFT:
+        case EltwiseMode::LEFT_SHIFT:
+        case EltwiseMode::BITWISE_AND:
+        case EltwiseMode::BITWISE_OR:
+        case EltwiseMode::BITWISE_XOR:
             return 2;
         case EltwiseMode::SQRT:
         case EltwiseMode::RSQRT:
@@ -77,7 +82,20 @@ ParamsKey eltwise_params::GetParamsKey() const {
     return k;
 }
 
+static bool IsBitwiseMode(EltwiseMode mode) {
+    return mode == EltwiseMode::BITWISE_AND || mode == EltwiseMode::LEFT_SHIFT || mode == EltwiseMode::RIGHT_SHIFT ||
+           mode == EltwiseMode::BITWISE_OR || mode == EltwiseMode::BITWISE_XOR;
+}
+
 Datatype EltwiseKernelBase::GetAccumulatorType(const eltwise_params &params) const {
+    // NOTE: Workaround for not promoting shift operations. Not sure what should happen
+    // if shift op is just one operation of other elementwise operations. My guess is that is should be promoted as
+    // well, but in reality more robust solution will be needed or (better) - assumption that types are not promoted. So
+    // probably this is a temporary solution.
+    if (IsBitwiseMode(params.operations[0].mode)) {
+        return params.inputs[0].GetDType();
+    }
+
     if (params.int8_quantization)
         return Datatype::INT32;
 
@@ -292,11 +310,14 @@ JitConstants EltwiseKernelBase::GetOperationsJitConstants(const eltwise_params& 
                 op += "(!" + input0_str + " != !" + input1_str + ")";
                 break;
             case EltwiseMode::FLOOR_MOD: {
+                auto input_0_type = params.inputs[0].GetDType();
                 auto input_1_type = params.inputs[1].GetDType();
-                if (input_1_type == kernel_selector::Datatype::F16 || input_1_type == kernel_selector::Datatype::F32) {
-                    op += "(" + input0_str + " - floor(" + input0_str + " / " + input1_str + ") * " + input1_str + ")";
+                if (input_0_type == input_1_type && (input_0_type == kernel_selector::Datatype::F16 || input_0_type == kernel_selector::Datatype::F32)) {
+                    op += "fmod(" + input0_str + ", " + input1_str + ")";
+                } else if (input_1_type == kernel_selector::Datatype::F16 || input_1_type == kernel_selector::Datatype::F32) {
+                    op += "(" + input0_str + " - trunc(" + input0_str + " / " + input1_str + ") * " + input1_str + ")";
                 } else {
-                    op += "(" + input0_str + " - floor(" + input0_str + " / convert_float(" + input1_str + ")) * " + input1_str + ")";
+                    op += "(" + input0_str + " - trunc(" + input0_str + " / convert_float(" + input1_str + ")) * " + input1_str + ")";
                 }
                 break;
             }
@@ -312,6 +333,21 @@ JitConstants EltwiseKernelBase::GetOperationsJitConstants(const eltwise_params& 
                 break;
             case EltwiseMode::IS_NAN:
                 op += "(isnan(" + input0_str + "))";
+                break;
+            case EltwiseMode::RIGHT_SHIFT:
+                op += "(" + input0_str + " >> " + input1_str + ")";
+                break;
+            case EltwiseMode::LEFT_SHIFT:
+                op += "(" + input0_str + " << " + input1_str + ")";
+                break;
+            case EltwiseMode::BITWISE_AND:
+                op += "(" + input0_str + " & " + input1_str + ")";
+                break;
+            case EltwiseMode::BITWISE_OR:
+                op += "(" + input0_str + " | " + input1_str + ")";
+                break;
+            case EltwiseMode::BITWISE_XOR:
+                op += "(" + input0_str + " ^ " + input1_str + ")";
                 break;
             default:
                 break;

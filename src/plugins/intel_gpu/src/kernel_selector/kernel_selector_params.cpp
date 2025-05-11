@@ -1,4 +1,4 @@
-﻿// Copyright (C) 2018-2024 Intel Corporation
+﻿// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
@@ -80,6 +80,9 @@ void ParamsKey::EnableInputDataType(Datatype dt) {
         case Datatype::F32:
             key.inputType.val.F32 = 1;
             break;
+        case Datatype::BF16:
+            key.inputType.val.BF16 = 1;
+            break;
         default:
             break;
     }
@@ -122,6 +125,9 @@ void ParamsKey::EnableOutputDataType(Datatype dt) {
         case Datatype::F32:
             key.outputType.val.F32 = 1;
             break;
+        case Datatype::BF16:
+            key.outputType.val.BF16 = 1;
+            break;
         default:
             break;
     }
@@ -148,6 +154,10 @@ void ParamsKey::EnableInputWeightsType(WeightsType wt) {
             break;
         case WeightsType::INT32:
             key.inputWeightsType.val.int32 = 1;
+            break;
+        case WeightsType::BF16:
+            key.inputWeightsType.val.BF16 = 1;
+            break;
         default:
             break;
     }
@@ -174,6 +184,10 @@ void ParamsKey::EnableOutputWeightsType(WeightsType wt) {
             break;
         case WeightsType::INT32:
             key.outputWeightsType.val.int32 = 1;
+            break;
+        case WeightsType::BF16:
+            key.outputWeightsType.val.BF16 = 1;
+            break;
         default:
             break;
     }
@@ -484,6 +498,12 @@ ParamsKey base_params::GetParamsKey() const {
         bDifferentTypes |= (i.GetDType() != outputs[0].GetDType());
         bFP16Used |= (i.GetDType() == Datatype::F16);
         dynamic_shapes |= i.is_dynamic();
+    }
+
+    for (const auto& fused_op : fused_ops) {
+        for (const auto& tensor : fused_op.tensors) {
+            dynamic_shapes |= tensor.is_dynamic();
+        }
     }
 
     k.EnableOutputDataType(outputs[0].GetDType());

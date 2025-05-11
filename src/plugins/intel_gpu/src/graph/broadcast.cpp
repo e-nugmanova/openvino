@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2024 Intel Corporation
+// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
@@ -21,6 +21,11 @@ layout broadcast_inst::calc_output_layout(broadcast_node const& node, kernel_imp
     auto input_layout = impl_param.get_input_layout();
     auto desc = impl_param.typed_desc<broadcast>();
 
+    auto output_type = input_layout.data_type;
+    if (impl_param.has_fused_primitives()) {
+        output_type = impl_param.get_output_element_type();
+    }
+
     if (!desc->target_shape.empty()) {
         std::vector<tensor::value_type> dims_converted(desc->target_shape.size());
         std::transform(desc->target_shape.begin(), desc->target_shape.end(), dims_converted.begin(), [](size_t value) {
@@ -29,11 +34,11 @@ layout broadcast_inst::calc_output_layout(broadcast_node const& node, kernel_imp
         for (size_t i = dims_converted.size(); i < 4; i++)
             dims_converted.push_back(1);  // extend shape to 4d
 
-        return { input_layout.data_type,
+        return { output_type,
                  input_layout.format,
                  tensor(format::get_default_format(dims_converted.size()), dims_converted) };
     } else {
-        return { input_layout.data_type, input_layout.format, desc->broadcast_sizes };
+        return { output_type, input_layout.format, desc->broadcast_sizes };
     }
 }
 
@@ -136,11 +141,15 @@ void broadcast_inst::update_output_memory() {
     if (static_cast<bool>(_outputs[0]) && _network.get_engine().is_the_same_buffer(output_memory(), input_memory()))
         return;
 
-    if (_node != nullptr)
-        build_deps();
+    build_deps();
 
     GPU_DEBUG_TRACE_DETAIL << id() << " : update_output_memory with mem of input " << get_node().get_dependency(0).id()
                            << " : " << input_memory_ptr()->buffer_ptr() << std::endl;
+    // Can_be_optimized nodes are allocating from memory_pool too. In this case,
+    // we need release the legacy output memory from memory pool explicitly.
+    if (static_cast<bool>(_outputs[0]) && get_node().get_program().get_config().get_enable_memory_pool()) {
+        get_network().get_memory_pool().release_memory(_outputs[0].get(), get_node().get_unique_id(), get_node().id(), get_network_id());
+    }
     _outputs[0] = input_memory_ptr();
     _mem_allocated = false;
 }

@@ -1,10 +1,12 @@
-// Copyright (C) 2018-2024 Intel Corporation
+// Copyright (C) 2018-2025 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
+#include <cassert>
+
 #include "snippets/op/loop.hpp"
 
-#include "snippets/utils.hpp"
+#include "snippets/utils/utils.hpp"
 
 namespace ov {
 namespace snippets {
@@ -37,9 +39,9 @@ std::shared_ptr<Node> LoopBegin::clone_with_new_inputs(const OutputVector& input
 
 std::shared_ptr<LoopEnd> LoopBegin::get_loop_end() const {
     const auto& last_output_inputs = get_output_target_inputs(0);
-    OPENVINO_ASSERT(last_output_inputs.size() == 1, "LoopBegin has more than one inputs attached to the last output");
+    assert(last_output_inputs.size() == 1 && "LoopBegin has more than one inputs attached to the last output");
     const auto& loop_end = ov::as_type_ptr<LoopEnd>(last_output_inputs.begin()->get_node()->shared_from_this());
-    OPENVINO_ASSERT(loop_end != nullptr, "LoopBegin must have LoopEnd connected to its last output");
+    assert(loop_end != nullptr && "LoopBegin must have LoopEnd connected to its last output");
     return loop_end;
 }
 
@@ -84,11 +86,14 @@ void LoopEnd::validate_and_infer_types() {
 
 bool LoopEnd::visit_attributes(AttributeVisitor &visitor) {
     std::vector<int> int_incremented(m_is_incremented.cbegin(), m_is_incremented.cend());
+    auto work_amount = utils::value2str(m_work_amount);
+    auto ptr_increments = utils::vector2str(m_ptr_increments);
+    auto final_offsets = utils::vector2str(m_finalization_offsets);
     visitor.on_attribute("is_incremented", int_incremented);
-    visitor.on_attribute("ptr_incr", m_ptr_increments);
-    visitor.on_attribute("fin_offset", m_finalization_offsets);
+    visitor.on_attribute("ptr_incr", ptr_increments);
+    visitor.on_attribute("fin_offset", final_offsets);
     visitor.on_attribute("data_sizes", m_element_type_sizes);
-    visitor.on_attribute("work_amount", m_work_amount);
+    visitor.on_attribute("work_amount", work_amount);
     visitor.on_attribute("increment", m_work_amount_increment);
     visitor.on_attribute("input_num", m_input_num);
     visitor.on_attribute("output_num", m_output_num);
@@ -107,7 +112,7 @@ std::shared_ptr<Node> LoopEnd::clone_with_new_inputs(const OutputVector& inputs)
 
 std::shared_ptr<LoopBegin> LoopEnd::get_loop_begin() {
     const auto& loop_begin = ov::as_type_ptr<LoopBegin>(get_input_source_output(get_input_size() - 1).get_node_shared_ptr());
-    OPENVINO_ASSERT(loop_begin != nullptr, "LoopEnd last input is not connected to LoopBegin");
+    assert(loop_begin != nullptr && "LoopEnd last input is not connected to LoopBegin");
     return loop_begin;
 }
 

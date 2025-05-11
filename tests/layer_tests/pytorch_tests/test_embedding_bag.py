@@ -1,4 +1,4 @@
-# Copyright (C) 2018-2024 Intel Corporation
+# Copyright (C) 2018-2025 Intel Corporation
 # SPDX-License-Identifier: Apache-2.0
 
 import platform
@@ -14,7 +14,7 @@ class TestEmbeddingBag1dOffsets(PytorchLayerTest):
 
         indices = np.array([2, 2, 2, 2, 4, 3, 2, 9]).astype(indicies_dtype)
         weights = np.random.randn(10, 10).astype(np.float32)
-        offsets = np.array([0, 4]).astype(indicies_dtype)
+        offsets = np.array([0, 4, 4]).astype(indicies_dtype)
         if per_sample_weights:
             per_sample_weights = np.random.randn(*indices.shape).astype(np.float32)
             return (indices, weights, offsets, per_sample_weights)
@@ -55,6 +55,7 @@ class TestEmbeddingBag1dOffsets(PytorchLayerTest):
 
     @pytest.mark.nightly
     @pytest.mark.precommit
+    @pytest.mark.precommit_torch_export
     @pytest.mark.precommit_fx_backend
     @pytest.mark.parametrize("indicies_dtype", ["int", "int32"])
     @pytest.mark.parametrize(
@@ -124,6 +125,7 @@ class TestEmbeddingBag2d(PytorchLayerTest):
 
     @pytest.mark.nightly
     @pytest.mark.precommit
+    @pytest.mark.precommit_torch_export
     @pytest.mark.precommit_fx_backend
     @pytest.mark.parametrize("indicies_size", [[1, 1], [2, 5], [3, 10], [4, 7]])
     @pytest.mark.parametrize("indicies_dtype", ["int", "int32"])
@@ -203,6 +205,7 @@ class TestEmbeddingBagPretrained(PytorchLayerTest):
 
     @pytest.mark.nightly
     @pytest.mark.precommit
+    @pytest.mark.precommit_torch_export
     @pytest.mark.precommit_fx_backend
     @pytest.mark.parametrize("indicies_size", [[1, 1], [2, 5], [3, 10], [4, 7]])
     @pytest.mark.parametrize("indicies_dtype", ["int", "int32"])
